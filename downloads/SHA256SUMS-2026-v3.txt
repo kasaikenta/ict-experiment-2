@@ -1,0 +1,3 @@
+8ea865c3fd3c16fb8c5ccfee49827d075d0dce43fa1ab5ce015cda47577c45d7  ict-experiment-2-2026-v3.zip
+4d0927df517ab9cbd40ddb25472a1cb85d8a826e78a00131de1378a91a2bc825  information-programs-2026-v3.zip
+3aa549029bd7ea7a7eb6ee8680a99d000fb84b7866ff59b6ae0594f14ec1fedd  coding-data-2026-v3.zip
