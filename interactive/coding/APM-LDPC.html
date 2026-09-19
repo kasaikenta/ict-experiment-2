@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>APM-LDPC のサイクルと合成関数</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      margin: 0;
+      padding: 1.5rem;
+      line-height: 1.6;
+    }
+
+    h1, h2, h3 {
+      margin-top: 0;
+    }
+
+    header {
+      margin-bottom: 1rem;
+    }
+
+    .section {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .section h2 {
+      font-size: 1.1rem;
+      margin-top: 0;
+    }
+
+    label {
+      display: inline-block;
+      margin-right: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    input[type="number"] {
+      width: 6rem;
+    }
+
+    button {
+      padding: 0.4rem 0.9rem;
+      margin-top: 0.4rem;
+      cursor: pointer;
+    }
+
+    #matrix-container {
+      margin-top: 0.6rem;
+      overflow-x: auto;
+    }
+
+    table.matrix-table {
+      border-collapse: collapse;
+      margin-top: 0.5rem;
+    }
+
+    .matrix-table th,
+    .matrix-table td {
+      border: 1px solid #ddd;
+      padding: 0.3rem 0.4rem;
+      text-align: center;
+      vertical-align: middle;
+      font-size: 0.9rem;
+    }
+
+    .cell-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      align-items: flex-start;
+    }
+
+    .cell-inner small {
+      font-size: 0.75rem;
+    }
+
+    .zero-flag {
+      margin-top: 0.2rem;
+    }
+
+    #messages {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    #messages.error {
+      color: #b00020;
+    }
+
+    #messages.info {
+      color: #333;
+    }
+
+    #results {
+      margin-top: 0.8rem;
+      font-size: 0.9rem;
+    }
+
+    .cycle-card {
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      margin-bottom: 0.6rem;
+      background: #fafafa;
+    }
+
+    .cycle-path {
+      font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono",
+        "Courier New", monospace;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .fc-table {
+      border-collapse: collapse;
+      margin-top: 0.3rem;
+      font-size: 0.85rem;
+    }
+
+    .fc-table th,
+    .fc-table td {
+      border: 1px solid #ccc;
+      padding: 0.15rem 0.35rem;
+      text-align: center;
+    }
+
+    footer {
+      margin-top: 1rem;
+      font-size: 0.8rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>APM-LDPC のサイクルを合成関数で調べる</h1>
+    <p>
+      パリティ検査行列
+      <span style="font-family:monospace;">H = (f<sub>ij</sub>)</span>
+      をブロック行列とみなし、各ブロックを
+      <span style="font-family:monospace;">f<sub>ij</sub>(x) = a<sub>ij</sub>x + b<sub>ij</sub> (mod P)</span>
+      で与えます。指定した長さ
+      <span style="font-family:monospace;">ℓ</span>
+      の block cycle を列挙し、その合成関数
+      <span style="font-family:monospace;">f<sub>c</sub></span>
+      の固定点から Tanner グラフ上のサイクルの有無を確認できます。
+    </p>
+  </header>
+
+  <div class="section">
+    <h2>1. パラメータの設定</h2>
+    <label>
+      法&nbsp;P：
+      <input id="modulusP" type="number" min="2" value="5" />
+    </label>
+    <br />
+    <label>
+      ブロック行数（チェック節点側）：
+      <input id="numRows" type="number" min="1" max="6" value="2" />
+    </label>
+    <label>
+      ブロック列数（ビット節点側）：
+      <input id="numCols" type="number" min="1" max="8" value="2" />
+    </label>
+    <br />
+    <button id="generate-matrix">H の入力欄を作成</button>
+    <small>（行数 ≤ 6, 列数 ≤ 8 程度を推奨）</small>
+    <div id="matrix-container"></div>
+  </div>
+
+  <div class="section">
+    <h2>2. サイクル探索条件</h2>
+    <label>
+      サイクル長 ℓ（block cycle の長さ, 偶数, ≥ 4）：
+      <input id="cycleLength" type="number" min="4" step="2" value="4" />
+    </label>
+    <br />
+    <button id="search-cycles">合成関数でサイクルをチェック</button>
+    <div id="messages"></div>
+    <div id="results"></div>
+  </div>
+
+  <footer>
+    <p>
+      各ブロックはアフィン置換
+      <span style="font-family:monospace;">f(x) = a x + b (mod P)</span>
+      として扱われます（<span style="font-family:monospace;">gcd(a, P) = 1</span>
+      が必須）。block cycle の合成関数
+      <span style="font-family:monospace;">f<sub>c</sub></span> の固定点が存在する ⇔
+      対応する Tanner サイクルが存在します。
+    </p>
+  </footer>
+
+  <script>
+    (function () {
+      const matrixContainer = document.getElementById("matrix-container");
+      const generateBtn = document.getElementById("generate-matrix");
+      const searchBtn = document.getElementById("search-cycles");
+      const messagesDiv = document.getElementById("messages");
+      const resultsDiv = document.getElementById("results");
+
+      // -----------------------
+      // ユーティリティ関数
+      // -----------------------
+      function mod(n, P) {
+        return ((n % P) + P) % P;
+      }
+
+      function gcd(a, b) {
+        a = Math.abs(a);
+        b = Math.abs(b);
+        while (b !== 0) {
+          const t = b;
+          b = a % b;
+          a = t;
+        }
+        return a;
+      }
+
+      function invMod(a, P) {
+        // 拡張 Euclid
+        let t = 0,
+          newT = 1;
+        let r = P,
+          newR = mod(a, P);
+        while (newR !== 0) {
+          const q = Math.floor(r / newR);
+          const tmpT = newT;
+          newT = t - q * newT;
+          t = tmpT;
+          const tmpR = newR;
+          newR = r - q * newR;
+          r = tmpR;
+        }
+        if (r !== 1) {
+          return null; // 逆元なし
+        }
+        if (t < 0) t += P;
+        return t;
+      }
+
+      function coordKey(block) {
+        return block.row + "," + block.col;
+      }
+
+      function clearMessages() {
+        messagesDiv.textContent = "";
+        messagesDiv.className = "";
+      }
+
+      function showError(msg) {
+        messagesDiv.textContent = msg;
+        messagesDiv.className = "error";
+        resultsDiv.innerHTML = "";
+      }
+
+      function showInfo(msg) {
+        messagesDiv.textContent = msg;
+        messagesDiv.className = "info";
+      }
+
+      // -----------------------
+      // Block クラス
+      // -----------------------
+      class Block {
+        constructor(row, col, a, b, P) {
+          this.row = row;
+          this.col = col;
+          this.a = mod(a, P);
+          this.b = mod(b, P);
+          this.P = P;
+          this.aInv = invMod(this.a, P); // gcd(a,P)=1 なら非 null
+        }
+
+        apply(x) {
+          return mod(this.a * x + this.b, this.P);
+        }
+
+        invApply(x) {
+          if (this.aInv === null) {
+            throw new Error("a has no inverse mod P");
+          }
+          // f^{-1}(x) = a^{-1}(x - b)
+          return mod(this.aInv * mod(x - this.b, this.P), this.P);
+        }
+
+        label() {
+          return (
+            "f_" +
+            this.row +
+            "," +
+            this.col +
+            "(x) = " +
+            this.a +
+            "·x + " +
+            this.b +
+            " (mod " +
+            this.P +
+            ")"
+          );
+        }
+      }
+
+      // -----------------------
+      // H の入力テーブル生成
+      // -----------------------
+      generateBtn.addEventListener("click", () => {
+        clearMessages();
+        resultsDiv.innerHTML = "";
+
+        const P = parseInt(document.getElementById("modulusP").value, 10);
+        const numRows = parseInt(document.getElementById("numRows").value, 10);
+        const numCols = parseInt(document.getElementById("numCols").value, 10);
+
+        if (!Number.isInteger(P) || P < 2) {
+          showError("P は 2 以上の整数にしてください。");
+          return;
+        }
+        if (!Number.isInteger(numRows) || numRows < 1 || numRows > 6) {
+          showError("行数は 1〜6 の整数にしてください。");
+          return;
+        }
+        if (!Number.isInteger(numCols) || numCols < 1 || numCols > 8) {
+          showError("列数は 1〜8 の整数にしてください。");
+          return;
+        }
+
+        const table = document.createElement("table");
+        table.className = "matrix-table";
+
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        const topLeft = document.createElement("th");
+        topLeft.textContent = "H = (f_ij)";
+        headRow.appendChild(topLeft);
+        for (let c = 0; c < numCols; c++) {
+          const th = document.createElement("th");
+          th.textContent = "col " + c;
+          headRow.appendChild(th);
+        }
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        for (let r = 0; r < numRows; r++) {
+          const tr = document.createElement("tr");
+          const rowHeader = document.createElement("th");
+          rowHeader.textContent = "row " + r;
+          tr.appendChild(rowHeader);
+
+          for (let c = 0; c < numCols; c++) {
+            const td = document.createElement("td");
+            const wrapper = document.createElement("div");
+            wrapper.className = "cell-inner";
+
+            const label = document.createElement("small");
+            label.textContent = "f_" + r + "," + c + "(x) = a·x + b";
+
+            const aInput = document.createElement("input");
+            aInput.type = "number";
+            aInput.value = "1";
+            aInput.id = "a_" + r + "_" + c;
+            aInput.title = "a_{" + r + "," + c + "}";
+
+            const bInput = document.createElement("input");
+            bInput.type = "number";
+            bInput.value = "0";
+            bInput.id = "b_" + r + "_" + c;
+            bInput.title = "b_{" + r + "," + c + "}";
+
+            const zeroLabel = document.createElement("label");
+            zeroLabel.className = "zero-flag";
+            const zeroCheckbox = document.createElement("input");
+            zeroCheckbox.type = "checkbox";
+            zeroCheckbox.id = "zero_" + r + "_" + c;
+            zeroLabel.appendChild(zeroCheckbox);
+            zeroLabel.appendChild(
+              document.createTextNode(" ゼロブロック（接続なし）")
+            );
+
+            wrapper.appendChild(label);
+
+            const row1 = document.createElement("div");
+            row1.appendChild(document.createTextNode("a: "));
+            row1.appendChild(aInput);
+
+            const row2 = document.createElement("div");
+            row2.appendChild(document.createTextNode("b: "));
+            row2.appendChild(bInput);
+
+            wrapper.appendChild(row1);
+            wrapper.appendChild(row2);
+            wrapper.appendChild(zeroLabel);
+
+            // ゼロブロックにするときは a,b を無効化
+            zeroCheckbox.addEventListener("change", () => {
+              const disabled = zeroCheckbox.checked;
+              aInput.disabled = disabled;
+              bInput.disabled = disabled;
+            });
+
+            td.appendChild(wrapper);
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+
+        matrixContainer.innerHTML = "";
+        matrixContainer.appendChild(table);
+        showInfo("H の入力欄を更新しました。各 f_ij の a, b を設定してください。");
+      });
+
+      // -----------------------
+      // H から Block 行列を構成
+      // -----------------------
+      function buildBlockMatrix() {
+        const P = parseInt(document.getElementById("modulusP").value, 10);
+        const numRows = parseInt(document.getElementById("numRows").value, 10);
+        const numCols = parseInt(document.getElementById("numCols").value, 10);
+
+        if (!Number.isInteger(P) || P < 2) {
+          throw new Error("P は 2 以上の整数にしてください。");
+        }
+
+        const blocksMatrix = [];
+        let nonZeroCount = 0;
+
+        for (let r = 0; r < numRows; r++) {
+          const row = [];
+          for (let c = 0; c < numCols; c++) {
+            const zeroBox = document.getElementById("zero_" + r + "_" + c);
+            if (!zeroBox) {
+              throw new Error("先に「H の入力欄を作成」を押してください。");
+            }
+            if (zeroBox.checked) {
+              row.push(null);
+              continue;
+            }
+            const aInput = document.getElementById("a_" + r + "_" + c);
+            const bInput = document.getElementById("b_" + r + "_" + c);
+            const aVal = parseInt(aInput.value, 10);
+            const bVal = parseInt(bInput.value, 10);
+
+            if (!Number.isFinite(aVal) || !Number.isFinite(bVal)) {
+              throw new Error(
+                "a_{" +
+                  r +
+                  "," +
+                  c +
+                  "}, b_{" +
+                  r +
+                  "," +
+                  c +
+                  "} は整数で入力してください。"
+              );
+            }
+
+            const g = gcd(aVal, P);
+            if (g !== 1) {
+              throw new Error(
+                "セル (" +
+                  r +
+                  "," +
+                  c +
+                  ") では gcd(a,P) = " +
+                  g +
+                  " です。アフィン置換にするには gcd(a,P)=1 が必要です。"
+              );
+            }
+
+            const block = new Block(r, c, aVal, bVal, P);
+            row.push(block);
+            nonZeroCount++;
+          }
+          blocksMatrix.push(row);
+        }
+
+        if (nonZeroCount === 0) {
+          throw new Error("すべてゼロブロックなのでサイクルは存在しません。");
+        }
+
+        return { blocksMatrix, P };
+      }
+
+      // -----------------------
+      // 近傍ブロックの取得
+      // type: "H" (同じ行, 列違い) または "V" (同じ列, 行違い)
+      // -----------------------
+      function neighbors(blocksMatrix, block, type) {
+        const res = [];
+        const numRows = blocksMatrix.length;
+        const numCols = blocksMatrix[0].length;
+
+        if (type === "H") {
+          const r = block.row;
+          for (let c = 0; c < numCols; c++) {
+            if (c === block.col) continue;
+            const nb = blocksMatrix[r][c];
+            if (nb) res.push(nb);
+          }
+        } else {
+          const c = block.col;
+          for (let r = 0; r < numRows; r++) {
+            if (r === block.row) continue;
+            const nb = blocksMatrix[r][c];
+            if (nb) res.push(nb);
+          }
+        }
+
+        return res;
+      }
+
+      // -----------------------
+      // 合成関数 f_c を計算
+      // blocks: 閉路のブロック列（最後のスタート重複は含めない）
+      // 戻り値: fc[j] = f_c(j) の配列
+      // -----------------------
+      function computeComposite(blocks, P) {
+        const L = blocks.length;
+        const fc = new Array(P);
+
+        for (let j = 0; j < P; j++) {
+          let x = j;
+          // 最初のブロックは f_{start}
+          x = blocks[0].apply(x);
+
+          for (let k = 1; k < L; k++) {
+            const prev = blocks[k - 1];
+            const cur = blocks[k];
+
+            if (cur.row === prev.row) {
+              // 水平遷移 → f の逆写像
+              x = cur.invApply(x);
+            } else if (cur.col === prev.col) {
+              // 垂直遷移 → f
+              x = cur.apply(x);
+            } else {
+              // block cycle であれば起きないはず
+              throw new Error("非隣接ブロックが経路に含まれています。");
+            }
+          }
+
+          fc[j] = x;
+        }
+
+        return fc;
+      }
+
+      // -----------------------
+      // block cycle 列挙（深さ優先）
+      // cycleLength = ℓ
+      // -----------------------
+      function searchBlockCycles(blocksMatrix, P, cycleLength, maxCyclesToStore) {
+        const numRows = blocksMatrix.length;
+        const numCols = blocksMatrix[0].length;
+
+        const allClosed = []; // { pathBlocks, fc, fixedPoints, totallyClosed }
+        let totalBlockCycles = 0;
+        let totalClosedBlockCycles = 0;
+
+        function dfs(start, current, prevType, depth, path, visited) {
+          // depth: これまでに使った辺の本数（path.length - 1）
+          if (depth === cycleLength) {
+            // スタートに戻っているか？
+            if (current === start) {
+              totalBlockCycles++;
+              const blocksForFc = path.slice(0, path.length - 1); // 最後の start は除外
+              const fc = computeComposite(blocksForFc, P);
+              const fixed = [];
+              for (let j = 0; j < P; j++) {
+                if (fc[j] === j) fixed.push(j);
+              }
+              if (fixed.length > 0) {
+                totalClosedBlockCycles++;
+                if (allClosed.length < maxCyclesToStore) {
+                  const totallyClosed = fixed.length === P;
+                  allClosed.push({
+                    pathBlocks: blocksForFc,
+                    fc,
+                    fixedPoints: fixed,
+                    totallyClosed,
+                    length: cycleLength,
+                  });
+                }
+              }
+            }
+            return;
+          }
+
+          const nextType = prevType === "H" ? "V" : "H";
+          const nbs = neighbors(blocksMatrix, current, nextType);
+
+          for (const nb of nbs) {
+            const key = coordKey(nb);
+            const isStart = nb === start;
+
+            if (isStart && depth + 1 === cycleLength) {
+              // 最後の一歩でスタートに戻る
+              path.push(nb);
+              dfs(start, nb, nextType, depth + 1, path, visited);
+              path.pop();
+            } else if (!isStart && !visited.has(key) && depth + 1 < cycleLength) {
+              // 途中では同じブロックを二度通らない simple cycle に限定
+              visited.add(key);
+              path.push(nb);
+              dfs(start, nb, nextType, depth + 1, path, visited);
+              path.pop();
+              visited.delete(key);
+            }
+          }
+        }
+
+        for (let r = 0; r < numRows; r++) {
+          for (let c = 0; c < numCols; c++) {
+            const start = blocksMatrix[r][c];
+            if (!start) continue;
+
+            const startKey = coordKey(start);
+            const visited = new Set([startKey]);
+            const path = [start];
+
+            // 最初の一歩は「横方向」からのみ出る。
+            // block cycle は適当に回転させることで
+            // 「最初のステップが水平」となるようにとれるので、
+            // この制約で十分。
+            const firstNeighbors = neighbors(blocksMatrix, start, "H");
+            for (const nb of firstNeighbors) {
+              const key = coordKey(nb);
+              visited.add(key);
+              path.push(nb);
+              dfs(start, nb, "H", 1, path, visited);
+              path.pop();
+              visited.delete(key);
+            }
+          }
+        }
+
+        return {
+          closedCycles: allClosed,
+          totalBlockCycles,
+          totalClosedBlockCycles,
+        };
+      }
+
+      // -----------------------
+      // 「サイクル探索」ボタン
+      // -----------------------
+      searchBtn.addEventListener("click", () => {
+        clearMessages();
+        resultsDiv.innerHTML = "";
+
+        const cycleLength = parseInt(
+          document.getElementById("cycleLength").value,
+          10
+        );
+
+        if (!Number.isInteger(cycleLength) || cycleLength < 4) {
+          showError("サイクル長 ℓ は 4 以上の整数にしてください。");
+          return;
+        }
+        if (cycleLength % 2 !== 0) {
+          showError("block cycle は水平/垂直を交互に移動するので、ℓ は偶数である必要があります。");
+          return;
+        }
+
+        let blocksMatrix, P;
+        try {
+          const built = buildBlockMatrix();
+          blocksMatrix = built.blocksMatrix;
+          P = built.P;
+        } catch (e) {
+          showError(e.message);
+          return;
+        }
+
+        showInfo("サイクル探索中（小さなサイズにしてください）…");
+
+        // 探索（保存する閉じたサイクルは最大 20 個）
+        const { closedCycles, totalBlockCycles, totalClosedBlockCycles } =
+          searchBlockCycles(blocksMatrix, P, cycleLength, 20);
+
+        // 結果表示
+        const fragments = document.createDocumentFragment();
+
+        const summary = document.createElement("p");
+        summary.innerHTML =
+          "探索した block cycle（単純閉路）の本数: <b>" +
+          totalBlockCycles +
+          "</b><br>" +
+          "そのうち、合成関数 f<sub>c</sub> が固定点を持つ（Tanner サイクルに対応する）閉じた block cycle の本数: <b>" +
+          totalClosedBlockCycles +
+          "</b>";
+        fragments.appendChild(summary);
+
+        if (totalClosedBlockCycles === 0) {
+          const p = document.createElement("p");
+          p.textContent =
+            "長さ ℓ = " +
+            cycleLength +
+            " のサイクル（Tanner グラフ上）は見つかりませんでした。";
+          fragments.appendChild(p);
+        } else {
+          const p = document.createElement("p");
+          p.textContent =
+            "以下に、代表的な閉じた block cycle をいくつか表示します（最大 20 個）。";
+          fragments.appendChild(p);
+
+          closedCycles.forEach((info, idx) => {
+            const card = document.createElement("div");
+            card.className = "cycle-card";
+
+            const h = document.createElement("h3");
+            h.textContent =
+              "閉じた block cycle #" +
+              (idx + 1) +
+              " （長さ ℓ = " +
+              info.length +
+              "）";
+            card.appendChild(h);
+
+            // 経路表示
+            const pathTextParts = [];
+            info.pathBlocks.forEach((b, i) => {
+              pathTextParts.push(
+                "(" +
+                  b.row +
+                  "," +
+                  b.col +
+                  "): " +
+                  b.a +
+                  "·x + " +
+                  b.b +
+                  " (mod " +
+                  P +
+                  ")"
+              );
+              if (i < info.pathBlocks.length - 1) {
+                const next = info.pathBlocks[i + 1];
+                if (next.row === b.row) {
+                  pathTextParts.push("  --H-->  ");
+                } else {
+                  pathTextParts.push("  --V-->  ");
+                }
+              }
+            });
+            // 最後にスタートへ戻る矢印
+            const first = info.pathBlocks[0];
+            const last = info.pathBlocks[info.pathBlocks.length - 1];
+            if (last.row === first.row) {
+              pathTextParts.push("  --H-->  (" + first.row + "," + first.col + ")");
+            } else {
+              pathTextParts.push("  --V-->  (" + first.row + "," + first.col + ")");
+            }
+
+            const pathDiv = document.createElement("div");
+            pathDiv.className = "cycle-path";
+            pathDiv.textContent = pathTextParts.join("");
+            card.appendChild(pathDiv);
+
+            // 固定点情報
+            const fixed = info.fixedPoints;
+            const infoP = document.createElement("p");
+            if (info.totallyClosed) {
+              infoP.innerHTML =
+                "合成関数 f<sub>c</sub> は恒等写像です（すべての j ∈ Z<sub>" +
+                P +
+                "</sub> で f<sub>c</sub>(j) = j）。<br>" +
+                "この block cycle は <b>totally closed</b> であり、P 個の Tanner サイクルに対応します。";
+            } else {
+              infoP.innerHTML =
+                "f<sub>c</sub> の固定点の個数: <b>" +
+                fixed.length +
+                "</b> 個<br>" +
+                "固定点の集合: { " +
+                fixed.join(", ") +
+                " }<br>" +
+                "したがって、この block cycle に対応する Tanner サイクルが " +
+                fixed.length +
+                " 本存在します。";
+            }
+            card.appendChild(infoP);
+
+            // fc の値を小さい P に対してだけ表示
+            if (P <= 16) {
+              const table = document.createElement("table");
+              table.className = "fc-table";
+
+              const head = document.createElement("tr");
+              const th1 = document.createElement("th");
+              th1.textContent = "j";
+              const th2 = document.createElement("th");
+              th2.textContent = "f_c(j)";
+              head.appendChild(th1);
+              head.appendChild(th2);
+              table.appendChild(head);
+
+              for (let j = 0; j < P; j++) {
+                const tr = document.createElement("tr");
+                const td1 = document.createElement("td");
+                td1.textContent = j;
+                const td2 = document.createElement("td");
+                td2.textContent = info.fc[j];
+                if (info.fc[j] === j) {
+                  td1.style.fontWeight = "bold";
+                  td2.style.fontWeight = "bold";
+                }
+                tr.appendChild(td1);
+                tr.appendChild(td2);
+                table.appendChild(tr);
+              }
+
+              card.appendChild(table);
+            }
+
+            fragments.appendChild(card);
+          });
+        }
+
+        resultsDiv.innerHTML = "";
+        resultsDiv.appendChild(fragments);
+        showInfo("探索が完了しました。結果を下に表示しています。");
+      });
+    })();
+  </script>
+</body>
+</html>
