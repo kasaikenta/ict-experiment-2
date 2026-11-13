@@ -60,7 +60,18 @@ main = f'''<section class="hero"><div><p class="eyebrow">ICT.E218 / COURSE MATER
 <div class="submission"><strong>提出は授業システムから</strong><p>プログラムとレポートは、指定されたシステムに電子データとして提出してください。締切・ファイル形式は授業内およびシステム上の案内に従ってください。</p></div></section>
 <section id="slides"><div class="section-head"><div><p class="eyebrow">02 / LECTURE SLIDES</p><h2>授業スライド</h2></div><p>PDFを開いて閲覧・ダウンロードできます。</p></div><div class="tool-grid"><a class="tool" href="lectures/information-01.pdf"><span>情報理論・前半</span><small>授業スライド · PDF</small><b aria-hidden="true">↗</b></a><a class="tool" href="lectures/information-02.pdf"><span>情報理論・後半</span><small>授業スライド · PDF</small><b aria-hidden="true">↗</b></a><a class="tool" href="lectures/coding.pdf"><span>符号理論・前半＋後半</span><small>授業スライド · PDF</small><b aria-hidden="true">↗</b></a></div></section>
 <section class="updates-note"><div><p class="eyebrow">03 / UPDATES</p><h2>更新しても、入口は同じ。</h2><p>このページには現在の配付版を掲載します。課題を含む旧版の配付は停止しています。公開中の版はGitHub Releasesから取得できます。公開を終了した版は除外します。授業で版が指定された場合は、その版を使ってください。</p></div><a class="button secondary" href="updates.html">更新履歴と過去の版 →</a></section>'''
-(B / 'index.html').write_text(shell('教材ページ', main))
+homepage = release.get('homepage')
+if homepage:
+    target = html.escape(homepage, quote=True)
+    (B / 'index.html').write_text(f'''<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>掲載先の変更 | 情報通信実験第2</title><link rel="canonical" href="{target}">
+<meta http-equiv="refresh" content="0;url={target}"></head><body>
+<h1>情報通信実験第2</h1><p>講義資料の掲載先を大学HPへ変更しました。</p>
+<p><a href="{target}">講義資料ページを開く / Open course materials</a></p>
+<p>2026年度の課題は引き続き未公開です。</p></body></html>''')
+else:
+    (B / 'index.html').write_text(shell('教材ページ', main))
 
 blocks = []
 for line in (B / 'CHANGELOG.md').read_text().splitlines():
