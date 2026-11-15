@@ -2,7 +2,7 @@
 
 講義資料への入口：**https://kasai.ict.eng.isct.ac.jp/#teaching**
 
-2026-11-14、講義PDF3本をLaTeXで再構成した改訂版へ差し替えました。大学HPトップのTeaching欄から各PDFへ直接リンクしています。`ict-e218/`はファイル置き場専用で、内容ページは設けません。従来のGitHub Pagesの入口はHPトップのTeaching欄へ転送します。
+2026-11-14に講義PDFをLaTeXで再構成し、2026-11-15に符号理論も前半・後半へ分割しました。大学HPトップのTeaching欄から各PDFへ直接リンクしています。`ict-e218/`はファイル置き場専用で、内容ページは設けません。従来のGitHub Pagesの入口はHPトップのTeaching欄へ転送します。
 
 **2026年度の課題PDF・新版入力データ・教員用解答は引き続き非公開です。このリポジトリやHPの公開領域に追加しないでください。** 体験型教材も掲載対象外です。提出方法は従来どおり、授業で指定するシステムへの電子提出です。
 
@@ -10,7 +10,8 @@
 
 - [情報理論・前半（26ページ）](https://kasai.ict.eng.isct.ac.jp/ict-e218/lectures/information-01.pdf)
 - [情報理論・後半（29ページ）](https://kasai.ict.eng.isct.ac.jp/ict-e218/lectures/information-02.pdf)
-- [符号理論・前半＋後半（64ページ）](https://kasai.ict.eng.isct.ac.jp/ict-e218/lectures/coding.pdf)
+- [符号理論・前半（32ページ）](https://kasai.ict.eng.isct.ac.jp/ict-e218/lectures/coding-01.pdf)
+- [符号理論・後半（37ページ）](https://kasai.ict.eng.isct.ac.jp/ict-e218/lectures/coding-02.pdf)
 
 ## HP側の構成
 
@@ -19,8 +20,11 @@ www/index.html, www/en.html   Teaching欄に各PDFへの直接リンク
 www/ict-e218/lectures/
   information-01.pdf
   information-02.pdf
-  coding.pdf
+  coding-01.pdf
+  coding-02.pdf
 ```
+
+旧統合版`coding.pdf`は既存URLの互換性のため保持します。現行の講義リンクは前半・後半の2本です。
 
 `www/ict-e218/index.html`は置きません。このリポジトリの`lectures/`には現在の公開PDFを保存しています。
 
